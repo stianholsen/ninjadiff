@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide2.QtWidgets import QApplication, QWidget
 from binaryninjaui import DockHandler
 import sys
 import traceback
