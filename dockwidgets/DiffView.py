@@ -17,17 +17,8 @@ buildid = int(buildid) if buildid is not None else 0xffffffff
 
 
 class DiffView(QWidget, View):
-	def __init__(self, parent, data):
-		if not type(data) == BinaryView:
-			raise Exception('expected widget data to be a BinaryView')
-
-		self.src_bv: BinaryView = data
-
-		fname = interaction.get_open_filename_input('File to Diff:').decode('utf-8')
-		print('opening {}...'.format(fname))
-
+	def _analysis(self, parent):
 		# open secondary file and begin non-blocking analysis
-		self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(fname, update_analysis=False)
 		if self.dst_bv is None:
 			raise Exception('invalid file path')
 
@@ -83,6 +74,26 @@ class DiffView(QWidget, View):
 		self.update_timer.setInterval(200)
 		self.update_timer.setSingleShot(False)
 		self.update_timer.timeout.connect(lambda: self.updateTimerEvent())
+
+
+	def __init__(self, parent, data):
+		if not type(data) == BinaryView:
+			raise Exception('expected widget data to be a BinaryView')
+
+		self.src_bv: BinaryView = data
+		choice = interaction.get_int_input("Promt>", "1 for standard diffing, 2 for folder")
+		if choice == 2:
+			foldername = interaction.get_directory_name_input('Folder for Diffing:').decode('utf-8')
+			print(foldername)
+			for filename in os.listdir(foldername)[1:]:
+				self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(foldername, filename), update_analysis=False)
+				self._analysis(parent)
+		else:
+			fname = interaction.get_open_filename_input('File to Diff:').decode('utf-8')
+			print('opening {}...'.format(fname))
+			self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(fname, update_analysis=False)
+			print(self.dst_bv.file.filename)
+			self._analysis(parent)
 
 	def goToReference(self, func: Function, source: int, target: int):
 		return self.navigate(func.start)
