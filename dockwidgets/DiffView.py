@@ -3,6 +3,7 @@ from PySide2.QtWidgets import QApplication, QVBoxLayout, QWidget, QSplitter, QLa
 
 import re
 import os
+import time
 
 import binaryninjaui
 from binaryninja import BinaryView, core_version, interaction, BinaryViewType, plugin, Function
@@ -17,7 +18,14 @@ buildid = int(buildid) if buildid is not None else 0xffffffff
 
 
 class DiffView(QWidget, View):
+
+	def _setUpView(self, parent):
+		
+
+
+
 	def _analysis(self, parent):
+		self.src_bv.update_analysis()
 		# open secondary file and begin non-blocking analysis
 		if self.dst_bv is None:
 			raise Exception('invalid file path')
@@ -74,7 +82,10 @@ class DiffView(QWidget, View):
 		self.update_timer.setInterval(200)
 		self.update_timer.setSingleShot(False)
 		self.update_timer.timeout.connect(lambda: self.updateTimerEvent())
-
+		while differ.finished == False:
+			print("waiting for completion")
+			time.sleep(2)
+		print("completion")
 
 	def __init__(self, parent, data):
 		if not type(data) == BinaryView:
@@ -85,9 +96,12 @@ class DiffView(QWidget, View):
 		if choice == 2:
 			foldername = interaction.get_directory_name_input('Folder for Diffing:').decode('utf-8')
 			print(foldername)
-			for filename in os.listdir(foldername)[1:]:
+			self.src_bv : BinaryView = BinaryViewType.get_view_of_file(os.path.join(foldername, os.listdir(foldername)[0]), update_analysis=True)
+			for filename in os.listdir(foldername)[1:3]:
 				self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(foldername, filename), update_analysis=False)
+				print("Analysing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
 				self._analysis(parent)
+				self.src_bv = self.dst_bv
 		else:
 			fname = interaction.get_open_filename_input('File to Diff:').decode('utf-8')
 			print('opening {}...'.format(fname))
