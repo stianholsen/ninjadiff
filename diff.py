@@ -45,10 +45,11 @@ class BackgroundDiffer(binja.BackgroundTaskThread):
                 src_function.source_function.add_user_address_tag(src_function.address, tag)
                 for bb in src_function.basic_blocks:
                     for instr in bb.source_block:
-                        src_function.source_function.set_user_instr_highlight(
-                            instr.address,
-                            binja.highlight.HighlightStandardColor.RedHighlightColor
-                        )
+                       print('	new function: ', instr.address, ', color: Red') 
+                       #src_function.source_function.set_user_instr_highlight(
+                       #     instr.address,
+                       #     binja.highlight.HighlightStandardColor.RedHighlightColor
+                       # )
                 continue
 
             # attempt to build a mapping between addresses in the source and destination binaries
@@ -60,30 +61,33 @@ class BackgroundDiffer(binja.BackgroundTaskThread):
                 dst_instr = dst_instrs[instr_index]
 
                 if instructionComparator.compare_instructions(src_instr, dst_instr):
-                    src_function.source_function.set_user_instr_highlight(
-                        src_instr.address,
-                        binja.highlight.HighlightStandardColor.GreenHighlightColor
-                    )
-
-                    min_pairing.source_function.set_user_instr_highlight(
-                        dst_instr.address,
-                        binja.highlight.HighlightStandardColor.GreenHighlightColor
-                    )
+                    print('	function: ', src_instr.address, ', color: Green')
+                    #src_function.source_function.set_user_instr_highlight(
+                    #    src_instr.address,
+                    #    binja.highlight.HighlightStandardColor.GreenHighlightColor
+                    #)
+                    print('	function (min_pairing): ', dst_instr.address, ', color: Green')
+                    #min_pairing.source_function.set_user_instr_highlight(
+                    #    dst_instr.address,
+                    #    binja.highlight.HighlightStandardColor.GreenHighlightColor
+                    #)
 
                 else:
                     print('tagging instruction diff at {}'.format(hex(src_instr.address)))
                     self.address_map.add_mapping(src_addr=src_instr.address, dst_addr=dst_instr.address)
                     tag = src_function.source_function.create_tag(diff_tt, 'Instruction differs')
-                    src_function.source_function.add_user_address_tag(src_instr.address, tag)
-                    src_function.source_function.set_user_instr_highlight(
-                        src_instr.address,
-                        binja.highlight.HighlightStandardColor.RedHighlightColor
-                    )
-
-                    min_pairing.source_function.set_user_instr_highlight(
-                        dst_instr.address,
-                        binja.highlight.HighlightStandardColor.RedHighlightColor
-                    )
+                    print('	user address tag: ', src_instr.address, ', tag: ', tag)
+                    print('     user instr: ', src_instr.address, ', color: Red')
+                    #src_function.source_function.add_user_address_tag(src_instr.address, tag)
+                    #src_function.source_function.set_user_instr_highlight(
+                    #    src_instr.address,
+                    #    binja.highlight.HighlightStandardColor.RedHighlightColor
+                    #)
+                    print('     function (min_pairing): ', dst_instr.address, ', color: Red')
+                    #min_pairing.source_function.set_user_instr_highlight(
+                    #    dst_instr.address,
+                    #    binja.highlight.HighlightStandardColor.RedHighlightColor
+                    #)
 
         print('finished diffing')
 

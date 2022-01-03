@@ -35,68 +35,6 @@ class DiffView(QWidget, View):
 			time.sleep(2)
 		print("background task completed")
 
-	def _analysis_and_view(self, parent):
-		# open secondary file and begin non-blocking analysis
-		if self.dst_bv is None:
-			raise Exception('invalid file path')
-
-		self.dst_bv.update_analysis()
-
-		# begin diffing process in background thread
-		differ = diff.BackgroundDiffer(self.src_bv, self.dst_bv)
-		differ.start()
-		self.address_map = differ.address_map
-
-		QWidget.__init__(self, parent)
-		View.__init__(self)
-
-		self.setupView(self)
-
-		self.current_offset = 0
-
-		self.splitter = QSplitter(Qt.Orientation.Horizontal, self)
-
-		frame = ViewFrame.viewFrameForWidget(self)
-		self.dst_editor = LinearView(self.dst_bv, frame)
-		self.dst_editor.setAccessibleName('Destination Editor')
-		self.src_editor = LinearView(self.src_bv, frame)
-		self.src_editor.setAccessibleName('Source Editor')
-
-		# sync location between src and dst panes
-		self.sync = True
-
-		self.binary_text = TokenizedTextView(self, self.src_bv)
-		self.is_raw_disassembly = False
-		self.raw_address = 0
-
-		self.is_navigating_history = False
-		self.memory_history_addr = 0
-
-		small_font = QApplication.font()
-		small_font.setPointSize(11)
-
-		self.splitter.addWidget(self.src_editor)
-		self.splitter.addWidget(self.dst_editor)
-
-		# Equally sized
-		self.splitter.setSizes([0x7fffffff, 0x7fffffff])
-
-		layout = QVBoxLayout()
-		layout.setContentsMargins(0, 0, 0, 0)
-		layout.setSpacing(0)
-		layout.addWidget(self.splitter, 100)
-		self.setLayout(layout)
-
-		self.needs_update = True
-		self.update_timer = QTimer(self)
-		self.update_timer.setInterval(200)
-		self.update_timer.setSingleShot(False)
-		self.update_timer.timeout.connect(lambda: self.updateTimerEvent())
-		while differ.finished == False:
-			print("waiting for background task to complete")
-			time.sleep(2)
-		print("background task completed")
-
 	def __init__(self, parent, data):
 		if not type(data) == BinaryView:
 			raise Exception('expected widget data to be a BinaryView')
@@ -109,17 +47,14 @@ class DiffView(QWidget, View):
 			for filename in os.listdir(foldername)[1:3]:
 				self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(foldername, filename), update_analysis=False)
 				print("Analysing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
-				if filename == os.listdir(foldername)[1]:
-					self._analysis_and_view(parent)
-				else:
-					self._analysis()
+				self._analysis()
 				self.src_bv = self.dst_bv
 		else:
 			fname = interaction.get_open_filename_input('File to Diff:').decode('utf-8')
 			print('opening {}...'.format(fname))
 			self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(fname, update_analysis=False)
 			print(self.dst_bv.file.filename)
-			self._analysis_and_view(parent)
+			self._analysis()
 
 	def goToReference(self, func: Function, source: int, target: int):
 		return self.navigate(func.start)

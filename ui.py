@@ -6,17 +6,16 @@ from .dockwidgets import DiffWidget, DiffView, widget
 
 
 def cb_diff(bv):
-    def switch_view():
-        dh = DockHandler.getActiveDockHandler()
-        vf = dh.getViewFrame()
-        vf.setViewType('Diff:' + bv.view_type)
+	def switch_view():
+		dh = DockHandler.getActiveDockHandler()
+		vf = dh.getViewFrame()
+		vf.setViewType('Diff:' + bv.view_type)
 
-    execute_on_main_thread_and_wait(switch_view)
+	execute_on_main_thread_and_wait(switch_view)
 
 
 def initialize_ui():
-    widget.register_dockwidget(DiffWidget.DiffDestWidget, "Diff", Qt.LeftDockWidgetArea, Qt.Vertical, False)
+#	widget.register_dockwidget(DiffWidget.DiffDestWidget, "Diff", Qt.LeftDockWidgetArea, Qt.Vertical, False)
+	PluginCommand.register("Diff\\Run", "Select file to diff", cb_diff)
 
-    PluginCommand.register("Diff\\Run", "Select file to diff", cb_diff)
-
-    ViewType.registerViewType(DiffView.DiffViewType())
+	ViewType.registerViewType(DiffView.DiffViewType())
