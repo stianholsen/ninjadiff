@@ -15,7 +15,7 @@ def cb_diff(bv):
 
 
 def initialize_ui():
-#	widget.register_dockwidget(DiffWidget.DiffDestWidget, "Diff", Qt.LeftDockWidgetArea, Qt.Vertical, False)
-	PluginCommand.register("Diff\\Run", "Select file to diff", cb_diff)
+	widget.register_dockwidget(DiffWidget.DiffDestWidget, "Diff", Qt.LeftDockWidgetArea, Qt.Vertical, False)
+	PluginCommand.register("DiffMultiple\\Run", "Select file to diff", cb_diff)
 
 	ViewType.registerViewType(DiffView.DiffViewType())
