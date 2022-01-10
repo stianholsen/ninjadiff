@@ -10,7 +10,7 @@ from binaryninja import BinaryView, core_version, interaction, BinaryViewType, p
 from binaryninjaui import View, ViewType, UIAction, LinearView, ViewFrame, TokenizedTextView, DockHandler
 from binaryninja.interaction import DirectoryNameField
 
-from .. import diff
+from .. import diff, diff_remove, diff_mark
 
 (major, minor, buildid) = re.match(r'^(\d+)\.(\d+)\.?(\d+)?', core_version()).groups()
 major = int(major)
@@ -32,32 +32,39 @@ class DiffView(QWidget, View):
 			interaction.get_form_input(["Get Data", None, malware_type_folder, malware_time_folder], "The options")
 			print(malware_type_folder.result, malware_time_folder.result)
 			#self.src_bv.update_analysis()
-			print('Source updated')
-			for filename in os.listdir(malware_type_folder.result)[0:8]:
-				if filename != self.src_bv.file.filename:
-					print("functions before: ", len(self.src_bv.functions))
+			#print('Source updated')
+			print("Functions before: ", len(self.src_bv.functions))
+			for filename in os.listdir(malware_type_folder.result)[0:0]:
+				file_size = os.path.getsize(os.path.join(malware_type_folder.result, filename))
+				if filename != self.src_bv.file.filename and int(file_size)/1000 < 300:
 					self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(malware_type_folder.result, filename), update_analysis=False)
 					print("Analysing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
 					self._analysis()
-					print("functions after: ", len(self.src_bv.functions))
-				time.sleep(3)
+					time.sleep(3)
+			print("Functions after: ", len(self.src_bv.functions))
+
+			for filename in os.listdir(malware_time_folder.result)[0:10]:
+				file_size = os.path.getsize(os.path.join(malware_time_folder.result, filename))
+				if filename != self.src_bv.file.filename and int(file_size)/1000 < 200:
+					self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(malware_time_folder.result, filename), update_analysis=False)
+					print("Analysing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
+					self._analysis_over_time()
+					time.sleep(3)
+
 		else:
 			fname = interaction.get_open_filename_input('File to Diff:').decode('utf-8')
 			print('opening {}...'.format(fname))
 			self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(fname, update_analysis=False)
 			print(self.dst_bv.file.filename)
-			self.src_bv.update_analysis_and_wait()
-			self._analysis()
+			self._analysis_and_ui(parent)
 
 	def _analysis(self):
 		# open secondary file and begin non-blocking analysis
 		if self.dst_bv is None:
 			raise Exception('invalid file path')
-		print('Update destination')
-		print('Destination updated')
 
 		# begin diffing process in background thread
-		differ = diff.BackgroundDiffer(self.src_bv, self.dst_bv)
+		differ = diff_remove.BackgroundDiffer(self.src_bv, self.dst_bv)
 		differ.start()
 		self.address_map = differ.address_map
 		print(self.address_map)
@@ -66,7 +73,31 @@ class DiffView(QWidget, View):
 			time.sleep(8)
 		print("background task completed")
 
+	def _analysis_over_time(self):
+		# open secondary file and begin non-blocking analysis
+		if self.dst_bv is None:
+			raise Exception('invalid file path')
+
+		# begin diffing process in background thread
+		differ2 = diff_mark.BackgroundDiffer2(self.src_bv, self.dst_bv)
+		differ2.start()
+		self.address_map = differ2.address_map
+		print(self.address_map)
+		while differ2.finished == False:
+			print("waiting for background task to complete")
+			time.sleep(8)
+		print("background task completed")
+
 	def _analysis_and_ui(self, parent):
+		if self.dst_bv is None:
+			raise Execption('invalid file path')
+		self.dst_bv.update_analysis()
+
+		# begin diffing process in background thread
+		differ3 = diff.BackgroundDiffer(self.src_bv, self.dst_bv)
+		differ3.start()
+		self.address_map = differ3.address_map
+
 		QWidget.__init__(self, parent)
 		View.__init__(self)
 

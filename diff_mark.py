@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-
-# Copyright 2019 River Loop Security LLC, All Rights Reserved
-# Author Rylan O'Connell
-
 import binaryninja as binja
 
 import math
@@ -12,8 +7,7 @@ from . import functionTypes, instructionComparator
 
 Binary_View = binja.binaryview.BinaryView
 
-
-class BackgroundDiffer(binja.BackgroundTaskThread):
+class BackgroundDiffer2(binja.BackgroundTaskThread):
     def __init__(self, src_bv: Binary_View, dst_bv: Binary_View):
         binja.BackgroundTaskThread.__init__(self, 'Diffing...', True)
         self.src_bv = src_bv
@@ -22,9 +16,7 @@ class BackgroundDiffer(binja.BackgroundTaskThread):
 
     def run(self):
         # ensure both views have finished processing before we continue
-        self.src_bv.update_analysis_and_wait()
         self.dst_bv.update_analysis_and_wait()
-
         print('started diffing...')
         diff_tt = self.src_bv.create_tag_type('Difference', '🚫')
         new_function_tt = self.src_bv.create_tag_type('New function', '➕')
@@ -32,24 +24,11 @@ class BackgroundDiffer(binja.BackgroundTaskThread):
         dst_functions = self.ingest(self.dst_bv)
         src_functions = self.ingest(self.src_bv)
 
-        # attempt to match destination functions to source functions
+	# attempt to match destination functions to source functions
         for src_function in src_functions:
             min_pairing, distance = self.get_min_pair(src_function, dst_functions)
             if min_pairing is not None:
                 print('diffing {} against {}'.format(src_function.source_function.name, min_pairing.source_function.name))
-
-            # if pairing failed (ie. no similar functions in the dest binary), assume it is not present in dest
-            if min_pairing is None:
-                print('tagging new function at {}...'.format(hex(src_function.address)))
-                tag = src_function.source_function.create_tag(new_function_tt, 'No matching functions')
-                src_function.source_function.add_user_address_tag(src_function.address, tag)
-                for bb in src_function.basic_blocks:
-                    for instr in bb.source_block:
-                        src_function.source_function.set_user_instr_highlight(
-                            instr.address,
-                            binja.highlight.HighlightStandardColor.RedHighlightColor
-                        )
-                continue
 
             # attempt to build a mapping between addresses in the source and destination binaries
             self.address_map.add_mapping(src_addr=src_function.address, dst_addr=min_pairing.address)
@@ -70,22 +49,7 @@ class BackgroundDiffer(binja.BackgroundTaskThread):
                         binja.highlight.HighlightStandardColor.GreenHighlightColor
                     )
 
-                else:
-                    print('tagging instruction diff at {}'.format(hex(src_instr.address)))
-                    self.address_map.add_mapping(src_addr=src_instr.address, dst_addr=dst_instr.address)
-                    tag = src_function.source_function.create_tag(diff_tt, 'Instruction differs')
-                    src_function.source_function.add_user_address_tag(src_instr.address, tag)
-                    src_function.source_function.set_user_instr_highlight(
-                        src_instr.address,
-                        binja.highlight.HighlightStandardColor.RedHighlightColor
-                    )
-
-                    min_pairing.source_function.set_user_instr_highlight(
-                        dst_instr.address,
-                        binja.highlight.HighlightStandardColor.RedHighlightColor
-                    )
-
-        print('finished diffing')
+        print('finished diffing marking')
 
     def get_min_pair(self, function: functionTypes.FunctionWrapper, pairings: List[functionTypes.FunctionWrapper]) -> Tuple[functionTypes.FunctionWrapper, float]:
         min_distance = math.inf

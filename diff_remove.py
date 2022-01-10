@@ -22,9 +22,7 @@ class BackgroundDiffer(binja.BackgroundTaskThread):
 
     def run(self):
         # ensure both views have finished processing before we continue
-        self.src_bv.update_analysis_and_wait()
         self.dst_bv.update_analysis_and_wait()
-
         print('started diffing...')
         diff_tt = self.src_bv.create_tag_type('Difference', '🚫')
         new_function_tt = self.src_bv.create_tag_type('New function', '➕')
@@ -43,12 +41,13 @@ class BackgroundDiffer(binja.BackgroundTaskThread):
                 print('tagging new function at {}...'.format(hex(src_function.address)))
                 tag = src_function.source_function.create_tag(new_function_tt, 'No matching functions')
                 src_function.source_function.add_user_address_tag(src_function.address, tag)
+                self.src_bv.remove_function(src_function.source_function)
                 for bb in src_function.basic_blocks:
                     for instr in bb.source_block:
-                        src_function.source_function.set_user_instr_highlight(
+                       src_function.source_function.set_user_instr_highlight(
                             instr.address,
                             binja.highlight.HighlightStandardColor.RedHighlightColor
-                        )
+                       )
                 continue
 
             # attempt to build a mapping between addresses in the source and destination binaries
@@ -64,11 +63,10 @@ class BackgroundDiffer(binja.BackgroundTaskThread):
                         src_instr.address,
                         binja.highlight.HighlightStandardColor.GreenHighlightColor
                     )
-
-                    min_pairing.source_function.set_user_instr_highlight(
-                        dst_instr.address,
-                        binja.highlight.HighlightStandardColor.GreenHighlightColor
-                    )
+                    #min_pairing.source_function.set_user_instr_highlight(
+                    #    dst_instr.address,
+                    #    binja.highlight.HighlightStandardColor.GreenHighlightColor
+                    #)
 
                 else:
                     print('tagging instruction diff at {}'.format(hex(src_instr.address)))
@@ -79,11 +77,11 @@ class BackgroundDiffer(binja.BackgroundTaskThread):
                         src_instr.address,
                         binja.highlight.HighlightStandardColor.RedHighlightColor
                     )
-
-                    min_pairing.source_function.set_user_instr_highlight(
-                        dst_instr.address,
-                        binja.highlight.HighlightStandardColor.RedHighlightColor
-                    )
+                    self.src_bv.remove_user_data_tag(src_instr.address, tag)
+                    #min_pairing.source_function.set_user_instr_highlight(
+                    #    dst_instr.address,
+                    #    binja.highlight.HighlightStandardColor.RedHighlightColor
+                    #)
 
         print('finished diffing')
 
