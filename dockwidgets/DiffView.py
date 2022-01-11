@@ -10,7 +10,7 @@ from binaryninja import BinaryView, core_version, interaction, BinaryViewType, p
 from binaryninjaui import View, ViewType, UIAction, LinearView, ViewFrame, TokenizedTextView, DockHandler
 from binaryninja.interaction import DirectoryNameField
 
-from .. import diff, diff_remove, diff_mark
+from .. import diff, diff_remove, diff_mark, db
 
 (major, minor, buildid) = re.match(r'^(\d+)\.(\d+)\.?(\d+)?', core_version()).groups()
 major = int(major)
@@ -25,6 +25,7 @@ class DiffView(QWidget, View):
 			raise Exception('expected widget data to be a BinaryView')
 
 		self.src_bv: BinaryView = data
+		dbconnection = db.DBconnector((self.src_bv.file.filename.split('/')[-1]).split('_')[1])
 		choice = interaction.get_int_input("Promt>", "1 for standard diffing, 2 for folder")
 		if choice == 2:
 			malware_type_folder = DirectoryNameField("Folder containing malware type")
@@ -42,15 +43,17 @@ class DiffView(QWidget, View):
 					self._analysis()
 					time.sleep(3)
 			print("Functions after: ", len(self.src_bv.functions))
-
+			count = 0
 			for filename in os.listdir(malware_time_folder.result)[0:10]:
 				file_size = os.path.getsize(os.path.join(malware_time_folder.result, filename))
-				if filename != self.src_bv.file.filename and int(file_size)/1000 < 200:
+				if filename != self.src_bv.file.filename and int(file_size)/1000 < 200 and dbconnection.search_by_md5(filename.split('_')[1]):
 					self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(malware_time_folder.result, filename), update_analysis=False)
 					print("Analysing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
 					self._analysis_over_time()
 					time.sleep(3)
-
+					count = count + 1
+				if count == 10:
+					break
 		else:
 			fname = interaction.get_open_filename_input('File to Diff:').decode('utf-8')
 			print('opening {}...'.format(fname))
