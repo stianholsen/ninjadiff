@@ -4,19 +4,20 @@ from PySide2.QtWidgets import QApplication, QVBoxLayout, QWidget, QSplitter, QLa
 import re
 import os
 import time
+from os import listdir
+from os.path import isfile, join, isdir
 
 import binaryninjaui
 from binaryninja import BinaryView, core_version, interaction, BinaryViewType, plugin, Function
 from binaryninjaui import View, ViewType, UIAction, LinearView, ViewFrame, TokenizedTextView, DockHandler
-from binaryninja.interaction import DirectoryNameField
+from binaryninja.interaction import DirectoryNameField, LabelField, OpenFileNameField
 
-from .. import diff, diff_remove, diff_mark, db
+from .. import diff, diff_remove, diff_mark, db, symbol_analysis
 
 (major, minor, buildid) = re.match(r'^(\d+)\.(\d+)\.?(\d+)?', core_version()).groups()
 major = int(major)
 minor = int(minor)
 buildid = int(buildid) if buildid is not None else 0xffffffff
-
 
 class DiffView(QWidget, View):
 
@@ -26,83 +27,77 @@ class DiffView(QWidget, View):
 
 		self.src_bv: BinaryView = data
 		dbconnection = db.DBconnector((self.src_bv.file.filename.split('/')[-1]).split('_')[1])
-		choice = interaction.get_int_input("Promt>", "1 for standard diffing, 2 for folder")
-		if choice == 2:
-			malware_type_folder = DirectoryNameField("Folder containing malware type")
-			malware_time_folder = DirectoryNameField("Folder for malware comparison")
-			interaction.get_form_input(["Get Data", None, malware_type_folder, malware_time_folder], "The options")
-			print(malware_type_folder.result, malware_time_folder.result)
-			#self.src_bv.update_analysis()
-			#print('Source updated')
-			print("Functions before: ", len(self.src_bv.functions))
-			for filename in os.listdir(malware_type_folder.result)[0:0]:
-				file_size = os.path.getsize(os.path.join(malware_type_folder.result, filename))
-				if filename != self.src_bv.file.filename and int(file_size)/1000 < 300:
-					self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(malware_type_folder.result, filename), update_analysis=False)
-					print("Analysing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
-					self._analysis()
-					time.sleep(3)
-			print("Functions after: ", len(self.src_bv.functions))
-			count = 0
-			for filename in os.listdir(malware_time_folder.result)[0:10]:
-				file_size = os.path.getsize(os.path.join(malware_time_folder.result, filename))
-				if filename != self.src_bv.file.filename and int(file_size)/1000 < 200 and dbconnection.search_by_md5(filename.split('_')[1]):
-					self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(malware_time_folder.result, filename), update_analysis=False)
-					print("Analysing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
-					self._analysis_over_time()
-					time.sleep(3)
-					count = count + 1
-				if count == 10:
-					break
+		folder_label = LabelField("Select folders to diff multiple files")
+		malware_type_folder = DirectoryNameField("Folder containing malware type")
+		malware_time_folder = DirectoryNameField("Folder for malware comparison")
+		file_label = LabelField("Select file to diff 1 on 1")
+		open_file = OpenFileNameField("Open file")
+		interaction.get_form_input(["Select folders or a file", None,folder_label, malware_type_folder, malware_time_folder, file_label, open_file], "The options")
+
+		QWidget.__init__(self, parent)
+		View.__init__(self)
+		self.similar_source_functions = []
+		replace = False
+		if open_file.result != '':
+			self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(open_file.result, update_analysis=False)	
+			print("Analysing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
+			self._analysis_and_ui(replace, 1)
 		else:
-			fname = interaction.get_open_filename_input('File to Diff:').decode('utf-8')
-			print('opening {}...'.format(fname))
-			self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(fname, update_analysis=False)
-			print(self.dst_bv.file.filename)
-			self._analysis_and_ui(parent)
+			if malware_type_folder.result != '':
+				for filename in os.listdir(malware_type_folder.result)[0:5]:
+					print("Functions before removing: ", len(self.src_bv.functions))
+					file_size = os.path.getsize(os.path.join(malware_type_folder.result, filename))
+					if filename != self.src_bv.file.filename and int(file_size)/1000 < 400:
+						self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(malware_type_folder.result, filename), update_analysis=False)
+						print("Analysing removing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
+						self._analysis_and_ui(replace, 2)
+						replace = True
+						print("Functions after removing: ", len(self.src_bv.functions))
 
-	def _analysis(self):
-		# open secondary file and begin non-blocking analysis
-		if self.dst_bv is None:
-			raise Exception('invalid file path')
+			if malware_time_folder.result != '':
+				count = 0
+				malware_time_files = []
+				malware_time_files = [join(malware_time_folder.result, f) for f in listdir(malware_time_folder.result) if isfile(join(malware_time_folder.result, f)) and 'VirusShare' in f]
+				malware_time_folders = [f for f in listdir(malware_time_folder.result) if isdir(join(malware_time_folder.result, f))]
+				for folder in malware_time_folders:
+					if join(malware_time_folder.result, folder) != malware_type_folder.result:
+						files = [join(malware_time_folder.result, folder, f) for f in listdir(join(malware_time_folder.result, folder)) if isfile(join(malware_time_folder.result, folder, f)) and 'VirusShare' in f]
+						malware_time_files.extend(files)
 
-		# begin diffing process in background thread
-		differ = diff_remove.BackgroundDiffer(self.src_bv, self.dst_bv)
-		differ.start()
-		self.address_map = differ.address_map
-		print(self.address_map)
-		while differ.finished == False:
-			print("waiting for background task to complete")
-			time.sleep(8)
-		print("background task completed")
+				for filename in malware_time_files[0:]:
+					file_size = os.path.getsize(filename)
+					if filename.split('/')[-1] != self.src_bv.file.filename and dbconnection.search_by_md5(filename.split('/')[-1].split('_')[1]) and int(file_size)/1000 < 400 :
+						self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(filename, update_analysis=False)
+						print("Analysing marking: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
+						self._analysis_and_ui(replace, 3)
+						replace = True
+						count = count + 1
+					if count == 40:
+						break
+			
+			for function in self.similar_source_functions:
+				print("similar functions: {}, {}, {}".format(hex(function[0]), hex(function[1]), function[2]))
 
-	def _analysis_over_time(self):
-		# open secondary file and begin non-blocking analysis
-		if self.dst_bv is None:
-			raise Exception('invalid file path')
-
-		# begin diffing process in background thread
-		differ2 = diff_mark.BackgroundDiffer2(self.src_bv, self.dst_bv)
-		differ2.start()
-		self.address_map = differ2.address_map
-		print(self.address_map)
-		while differ2.finished == False:
-			print("waiting for background task to complete")
-			time.sleep(8)
-		print("background task completed")
-
-	def _analysis_and_ui(self, parent):
+	def _analysis_and_ui(self, new, diff_type):
 		if self.dst_bv is None:
 			raise Execption('invalid file path')
 		self.dst_bv.update_analysis()
 
-		# begin diffing process in background thread
-		differ3 = diff.BackgroundDiffer(self.src_bv, self.dst_bv)
-		differ3.start()
-		self.address_map = differ3.address_map
-
-		QWidget.__init__(self, parent)
-		View.__init__(self)
+		if diff_type == 1:
+			# begin diffing process in background thread
+			differ = diff.BackgroundDiffer(self.src_bv, self.dst_bv)
+			differ.start()
+		elif diff_type == 2:
+			# begin diffing process in background thread
+			differ = diff_remove.BackgroundDiffer1(self.src_bv, self.dst_bv)
+			differ.start()
+		elif diff_type == 3:
+			# begin diffing process in background thread
+			differ = diff_mark.BackgroundDiffer2(self.src_bv, self.dst_bv)
+			differ.start()
+		else:
+			return
+		self.address_map = differ.address_map
 
 		self.setupView(self)
 
@@ -119,9 +114,10 @@ class DiffView(QWidget, View):
 		# sync location between src and dst panes
 		self.sync = True
 
-		self.binary_text = TokenizedTextView(self, self.src_bv)
-		self.is_raw_disassembly = False
-		self.raw_address = 0
+		if new == False:
+			self.binary_text = TokenizedTextView(self, self.src_bv)
+			self.is_raw_disassembly = False
+			self.raw_address = 0
 
 		self.is_navigating_history = False
 		self.memory_history_addr = 0
@@ -129,9 +125,12 @@ class DiffView(QWidget, View):
 		small_font = QApplication.font()
 		small_font.setPointSize(11)
 
-		self.splitter.addWidget(self.src_editor)
-		self.splitter.addWidget(self.dst_editor)
-
+		if new == False:
+			self.splitter.addWidget(self.src_editor)
+			self.splitter.addWidget(self.dst_editor)
+		if new == True:
+			self.splitter.replaceWidget(2, self.dst_editor)
+	
 		# Equally sized
 		self.splitter.setSizes([0x7fffffff, 0x7fffffff])
 
@@ -146,6 +145,18 @@ class DiffView(QWidget, View):
 		self.update_timer.setInterval(200)
 		self.update_timer.setSingleShot(False)
 		self.update_timer.timeout.connect(lambda: self.updateTimerEvent())
+		while differ.finished == False:
+			print("Waiting for background task to finish")
+			time.sleep(8)
+
+		if diff_type == 3:
+			functions = differ.join()
+			for function in functions:
+				if function not in self.similar_source_functions:
+					self.similar_source_functions.append(function)
+
+		print("finish background task")
+		#QWidget.close()
 
 	def goToReference(self, func: Function, source: int, target: int):
 		return self.navigate(func.start)

@@ -1,0 +1,13 @@
+{
+    "Subsystems Initialization": ["/etc/rc.d/rc.local", "/etc/rc.conf", "/etc/rcX.d", "/etc/rc.local", "/.bashrc", ".bash_profile", "/etc/rc"],
+    "Time-based Execution": ["/etc/cron.hourly", "/etc/crontab", "/etc/cron.daily", "crontab"],
+    "File Infection and Replacement": [],
+    "Sandbox detection": ["sys_vendor", "chroot", "mountinfo"],
+    "Processes Enumeration": ["/proc"],
+    "Anti-Debugging": ["ptrace", "_traceme", "_attach", "_preload"],
+    "Anti-Execution": [],
+    "Stalling Code": ["nanosleep"],
+    "Configuration Files": ["/etc/passwd", "/etc/resolv.conf", "/etc/hosts", "/etc/shadow"],
+    "File Systems": ["/proc/net/route", "/proc/net/tcp", "/proc/net/dev", "/proc/net/arp", "/sys/class/net/", "/proc/cmdline"]
+
+}
