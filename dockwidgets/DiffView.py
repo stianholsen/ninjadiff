@@ -6,11 +6,13 @@ import os
 import time
 from os import listdir
 from os.path import isfile, join, isdir
+import json
+import gc
 
 import binaryninjaui
 from binaryninja import BinaryView, core_version, interaction, BinaryViewType, plugin, Function
 from binaryninjaui import View, ViewType, UIAction, LinearView, ViewFrame, TokenizedTextView, DockHandler
-from binaryninja.interaction import DirectoryNameField, LabelField, OpenFileNameField
+from binaryninja.interaction import DirectoryNameField, LabelField, OpenFileNameField, ChoiceField
 
 from .. import diff, diff_remove, diff_mark, db, symbol_analysis
 
@@ -26,57 +28,116 @@ class DiffView(QWidget, View):
 			raise Exception('expected widget data to be a BinaryView')
 
 		self.src_bv: BinaryView = data
-		dbconnection = db.DBconnector((self.src_bv.file.filename.split('/')[-1]).split('_')[1])
 		folder_label = LabelField("Select folders to diff multiple files")
 		malware_type_folder = DirectoryNameField("Folder containing malware type")
 		malware_time_folder = DirectoryNameField("Folder for malware comparison")
+		analysis_type_field = ChoiceField("Type of analsysis: ", ["Diffing", "Symbols"])
 		file_label = LabelField("Select file to diff 1 on 1")
 		open_file = OpenFileNameField("Open file")
-		interaction.get_form_input(["Select folders or a file", None,folder_label, malware_type_folder, malware_time_folder, file_label, open_file], "The options")
-
+		interaction.get_form_input(["Select folders or a file", None, folder_label, malware_type_folder, malware_time_folder, analysis_type_field, file_label, open_file], "The options")
 		QWidget.__init__(self, parent)
 		View.__init__(self)
 		self.similar_source_functions = []
+		self.symbols_by_time = []
+		self.symbol_dict_by_file = {}
+		self.symbols_by_malware = []
+		self.malware_time_files = []
+		self.malware_type_files = []
+
 		replace = False
 		if open_file.result != '':
 			self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(open_file.result, update_analysis=False)	
 			print("Analysing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
 			self._analysis_and_ui(replace, 1)
 		else:
-			if malware_type_folder.result != '':
-				for filename in os.listdir(malware_type_folder.result)[0:5]:
-					print("Functions before removing: ", len(self.src_bv.functions))
-					file_size = os.path.getsize(os.path.join(malware_type_folder.result, filename))
-					if filename != self.src_bv.file.filename and int(file_size)/1000 < 400:
-						self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(malware_type_folder.result, filename), update_analysis=False)
-						print("Analysing removing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
-						self._analysis_and_ui(replace, 2)
-						replace = True
-						print("Functions after removing: ", len(self.src_bv.functions))
+			dbconnection = db.DBconnector((self.src_bv.file.filename.split('/')[-1]).split('_')[1])
+			if analysis_type_field.result == 0:
+				if malware_type_folder.result != '':
+					for filename in os.listdir(malware_type_folder.result)[0:5]:
+						print("Functions before removing: ", len(self.src_bv.functions))
+						file_size = os.path.getsize(os.path.join(malware_type_folder.result, filename))
+						if filename != self.src_bv.file.filename and int(file_size)/1000 < 700:
+							self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(malware_type_folder.result, filename), update_analysis=False)
+							print("Analysing removing: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
+							self._analysis_and_ui(replace, 2)
+							replace = True
+							print("Functions after removing: ", len(self.src_bv.functions))
 
-			if malware_time_folder.result != '':
-				count = 0
-				malware_time_files = []
-				malware_time_files = [join(malware_time_folder.result, f) for f in listdir(malware_time_folder.result) if isfile(join(malware_time_folder.result, f)) and 'VirusShare' in f]
-				malware_time_folders = [f for f in listdir(malware_time_folder.result) if isdir(join(malware_time_folder.result, f))]
-				for folder in malware_time_folders:
-					if join(malware_time_folder.result, folder) != malware_type_folder.result:
-						files = [join(malware_time_folder.result, folder, f) for f in listdir(join(malware_time_folder.result, folder)) if isfile(join(malware_time_folder.result, folder, f)) and 'VirusShare' in f]
-						malware_time_files.extend(files)
-
-				for filename in malware_time_files[0:]:
-					file_size = os.path.getsize(filename)
-					if filename.split('/')[-1] != self.src_bv.file.filename and dbconnection.search_by_md5(filename.split('/')[-1].split('_')[1]) and int(file_size)/1000 < 400 :
-						self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(filename, update_analysis=False)
-						print("Analysing marking: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
-						self._analysis_and_ui(replace, 3)
-						replace = True
-						count = count + 1
-					if count == 40:
-						break
-			
-			for function in self.similar_source_functions:
-				print("similar functions: {}, {}, {}".format(hex(function[0]), hex(function[1]), function[2]))
+				if malware_time_folder.result != '':
+					count = 0
+					malware_time_files = []
+					malware_time_files = [join(malware_time_folder.result, f) for f in listdir(malware_time_folder.result) if isfile(join(malware_time_folder.result, f)) and 'VirusShare' in f]
+					malware_time_folders = [f for f in listdir(malware_time_folder.result) if isdir(join(malware_time_folder.result, f))]
+					for folder in malware_time_folders:
+						if join(malware_time_folder.result, folder) != malware_type_folder.result:
+							files = [join(malware_time_folder.result, folder, f) for f in listdir(join(malware_time_folder.result, folder)) if isfile(join(malware_time_folder.result, folder, f)) and 'VirusShare' in f]
+							malware_time_files.extend(files)
+					for filename in malware_time_files:
+						file_size = os.path.getsize(filename)
+						if filename.split('/')[-1] != self.src_bv.file.filename and dbconnection.search_by_md5(filename.split('/')[-1].split('_')[1])[1] and int(file_size)/1000 < 700 :
+							self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(filename, update_analysis=False)
+							print("Analysing marking: ", self.src_bv.file.filename, " and ", self.dst_bv.file.filename)
+							self._analysis_and_ui(replace, 3)
+							replace = True
+							count = count + 1
+						if count == 50:
+							break
+				for function in self.similar_source_functions:
+					print("similar functions: {}, {}, {}".format(hex(function[0]), function[1], function[2]))
+			else:
+				start_time = time.time()
+				f = open("/Users/stianholsen2/Desktop/BinaryNinjaOutput/" + malware_type_folder.result.split('/')[-1] + '_symbols.json', "w+")
+				self.get_files(malware_time_folder.result, malware_type_folder.result.split('/')[-1])
+				type_folder_name = malware_type_folder.result.split('/')[-1]
+				self.symbol_dict_by_file[type_folder_name] = []
+				if malware_time_folder.result != '':
+					count_time = 0
+					for filename in self.malware_time_files:
+						file_size = os.path.getsize(filename)
+						md5_seach = dbconnection.search_by_md5(filename.split('/')[-1].split('_')[1])
+						if md5_seach[1] and int(file_size)/1000 < 2000:
+							self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(filename, update_analysis=False)
+							symbols = symbol_analysis.SymbolAnalysis()
+							symbols.set_file_and_type(self.dst_bv, 0)
+							symbols.start()
+							while symbols.finished == False:
+								print("Waiting for background task to finish")
+								time.sleep(3)
+							self.symbol_dict_by_file[type_folder_name].append({"Filename": self.dst_bv.file.filename.split('/')[-1], "Threat Label": str(md5_seach[2]), "Architecture": str(md5_seach[3]), "Date": str(md5_seach[0]), "Behavior": symbols.join_symbol_dict()})
+							del symbols
+							del self.dst_bv
+							del md5_seach
+							gc.collect()
+							count_time = count_time + 1
+						#if count_time == 2:
+						#	break
+				if malware_type_folder.result != '':
+					count_type = 0
+					for filename in self.malware_type_files:
+						file_size = os.path.getsize(os.path.join(malware_type_folder.result, filename))
+						md5_seach = dbconnection.search_malware_type_by_md5(filename.split('/')[-1].split('_')[1])
+						if md5_seach[1] and int(file_size)/1000 < 2000:
+							self.dst_bv: BinaryView = BinaryViewType.get_view_of_file(os.path.join(malware_type_folder.result, filename), update_analysis=False)
+							symbols = symbol_analysis.SymbolAnalysis()
+							symbols.set_file_and_type(self.dst_bv, 1)
+							symbols.start()
+							while symbols.finished == False:
+								print("Waiting for background task to finish")
+								time.sleep(3)
+							self.symbol_dict_by_file[type_folder_name].append({"Filename": self.dst_bv.file.filename.split('/')[-1], "Threat Label": str(md5_seach[2]), "Architecture": str(md5_seach[3]), "Date": str(md5_seach[0]), "Behavior": symbols.join_symbol_dict()})
+							del symbols
+							del self.dst_bv
+							gc.collect()
+							count_type = count_type + 1
+						#if count_type == 2:
+						#	break
+				self.symbol_dict_by_file[type_folder_name].sort(key = lambda x:x['Date'])
+				f.write(json.dumps(self.symbol_dict_by_file, indent = 4))
+				f.close()
+				print("Analysis completed in {} seconds for {} time files and {} type files".format(time.time() - start_time, count_time, count_type))
+				#[print(by_file, self.symbol_dict_by_file[by_file], "\n") for by_file in self.symbol_dict_by_file]
+				#print("Symbols by time: ", self.symbols_by_time)
+				#print("Symbols by malware: ", self.symbols_by_malware)
 
 	def _analysis_and_ui(self, new, diff_type):
 		if self.dst_bv is None:
@@ -150,13 +211,18 @@ class DiffView(QWidget, View):
 			time.sleep(8)
 
 		if diff_type == 3:
-			functions = differ.join()
-			for function in functions:
-				if function not in self.similar_source_functions:
-					self.similar_source_functions.append(function)
-
+			self.similar_source_functions.extend(differ.join())
 		print("finish background task")
-		#QWidget.close()
+
+	def get_files(self, folder, malware):
+		for f in listdir(folder):
+			if isfile(join(folder, f)) and 'Store' not in f:
+				if folder.split("/")[-1] == malware:
+					self.malware_type_files.append(join(folder, f))
+				else:
+					self.malware_time_files.append(join(folder, f))
+			if isdir(join(folder, f)) and re.search("(Sparc|MC68000|benign|Intel)", f) == None and re.search("VirusShare_ELF/unknown", join(folder, f)) == None:
+				self.get_files(join(folder, f), malware)
 
 	def goToReference(self, func: Function, source: int, target: int):
 		return self.navigate(func.start)

@@ -1,13 +1,72 @@
 {
-    "Subsystems Initialization": ["/etc/rc.d/rc.local", "/etc/rc.conf", "/etc/rcX.d", "/etc/rc.local", "/.bashrc", ".bash_profile", "/etc/rc"],
-    "Time-based Execution": ["/etc/cron.hourly", "/etc/crontab", "/etc/cron.daily", "crontab"],
-    "File Infection and Replacement": [],
-    "Sandbox detection": ["sys_vendor", "chroot", "mountinfo"],
-    "Processes Enumeration": ["/proc"],
-    "Anti-Debugging": ["ptrace", "_traceme", "_attach", "_preload"],
-    "Anti-Execution": [],
-    "Stalling Code": ["nanosleep"],
-    "Configuration Files": ["/etc/passwd", "/etc/resolv.conf", "/etc/hosts", "/etc/shadow"],
-    "File Systems": ["/proc/net/route", "/proc/net/tcp", "/proc/net/dev", "/proc/net/arp", "/sys/class/net/", "/proc/cmdline"]
-
+    "Subsystems Initialization":{
+        "strings": ["/etc/rc.d/rc.local", "/etc/rc.conf", "/etc/rcX.d", "/etc/rc.local", "/etc/rc"],
+        "regex": "/etc/.*rc",
+        "vulnerable_devices": []
+    },
+    "Time-based Execution": {
+        "strings": ["/etc/cron.hourly", "/etc/crontab", "/etc/cron.daily", "crontab", "var/spool/cron", "watchdog"],
+        "regex": "((etc.*cron)|cron|watchdog)",
+        "vulnerable_devices": []
+    },
+    "User File Alternation": {
+        "strings": ["/.bashrc", ".bash_profile", "desktop"],
+        "regex": "(bash|desktop)",
+        "vulnerable_devices": []
+    },
+    "File Infection and Replacement": {
+        "strings": ["ls -ld", "/bin/", "/usr/bin", "/usr/bin/dpkgd", "/bin/busybox", "/tmp/.*elf"],
+        "regex": "in symbol_analysis.py",
+        "vulnerable_devices": []
+    },
+    "Sandbox Detection": {
+        "strings": ["sys_vendor", "chroot", "mountinfo", "/sys/class/dmi/id/product name", "/sys/class/dmi/id/sys vendor", "/proc/cpuinfo", "/proc/sysinfo", "/proc/scsi/scsi", "/proc/vz", "/proc/bc", "/proc/xen/capabilities", "/proc/<PID>/mountinfo"],
+        "regex": "(/proc/(cmdline|.*/mountifo)|sys_vendor)",
+        "vulnerable_devices": []
+    },
+    "Process Renaming and Termination": {
+        "strings": ["prctl", "PR_SET_NAME","sh", "sed"],
+        "regex": "(^prctl|PR_SET_NAME|^sh |^sed )",
+        "vulnerable_devices": []
+    },
+    "Privilege Escalation": {
+        "strings": ["EPERM", "EACCES", "/proc/self/mem", "procfs", "/etc/passwd", "ip_tables.ko"],
+        "regex": "(^EPERM|^EACCES|(/etc/.*pass)|(ip.*tables))",
+        "vulnerable_devices": []
+    },
+    "Anti-Debugging": {
+        "strings": ["ptrace", "PTRACE_TRACEME", "PTRACE_ATTACH", "LD_PRELOAD"],
+        "regex": "(ptrace|ATTACH|TRACE|PRELOAD)",
+        "vulnerable_devices": []
+    },
+    "Process Injection": {
+        "strings": ["ptrace", "daemon", "PTRACE_POKETEXT", "PTRACE_POKEDATA", "PTRACE_POKEUSER", "CAP_SYS_PTRACE", "/proc/<TARGET_PID>/mem", "process_vm_writev", "dlopen"],
+        "regex":  "(ptrace|SYS.*TRACE|POKETEXT|POKEDATA|POKEUSER|(proc/.*/mem$)|(process.*vm.*writev)|dlopen|daemon)",
+        "vulnerable_devices": []
+    },
+    "Stalling Code": {
+        "strings": ["nanosleep"],
+        "regex": "nanosleep",
+        "vulnerable_devices": []
+    },
+    "Configuration Files": {
+        "strings": ["/etc/passwd", "/etc/resolv.conf", "/etc/hosts", "/etc/shadow"],
+        "regex": "(/etc/(passw|resolv|host|shadow)|/proc/(cmdline|version|meminfo|devices|filesystems|dma|ioports|kernel)|/sys/(firmware|devices|power)|sysctl)",
+        "vulnerable_devices": []
+    },
+    "Network Information": {
+        "strings": ["/proc/net/route", "/proc/net/tcp", "/proc/net/dev", "/proc/net/arp", "/sys/class/net/", "/proc/cmdline"],
+        "regex": "/proc/net",
+        "vulnerable_devices": []
+    },
+    "IPs and ports": {
+        "strings": ["111.111.111.111"],
+        "regex": "in symbol_analysis.py",
+        "vulnerable_devices": []
+    },
+    "Functions": {
+        "strings": ["hack", "DNS", "master", "DDoS", "SynFlood", "DNS_Flood", "SYN_Flood", "Stream_Flood", "ICMP_Flood", "getspoof"],
+        "regex": "in symbol_analysis.py",
+        "vulnerable_devices": []
+    }
 }
